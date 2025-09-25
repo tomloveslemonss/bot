@@ -14,9 +14,11 @@ if not TOKEN:
     print("Error: DISCORD_TOKEN environment variable not set!")
     exit(1)
 
+# Channel IDs
 REQUEST_CHANNEL_ID = 1420810819746267217
 ADMIN_CHANNEL_ID = 1420810932367655154
 
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
@@ -63,7 +65,7 @@ artist_roles = {
     "other": 1360192004100980826
 }
 
-# Keep bot alive
+# Keep bot alive with Flask
 app = Flask('')
 
 @app.route('/')
@@ -78,19 +80,20 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# /request command: free-form artist, mentions requester
+# /request command: free-form artist, mentions requester, prevents double-send
 @tree.command(name="request", description="Submit a new request")
 @app_commands.describe(artist="Artist name", name="Name of the request", link="Spotify, YouTube, SoundCloud link")
 async def request(interaction: discord.Interaction, artist: str, name: str, link: str):
+    await interaction.response.defer(ephemeral=True)  # prevents double responses
     artist_lower = artist.lower()
     role_id = artist_roles.get(artist_lower, artist_roles["other"])
 
     request_channel = bot.get_channel(REQUEST_CHANNEL_ID)
     if not request_channel:
-        await interaction.response.send_message("Error: Could not find requests channel.", ephemeral=True)
+        await interaction.followup.send("Error: Could not find requests channel.", ephemeral=True)
         return
 
-    # Send request exactly once, mention user
+    # Send request exactly once
     msg = await request_channel.send(
         f"**{name}** ({artist})\n{link}\nVote by reacting 👍\nRequested by {interaction.user.mention}"
     )
@@ -109,7 +112,7 @@ async def request(interaction: discord.Interaction, artist: str, name: str, link
         requests.append(new_request)
         save_requests(requests)
 
-    await interaction.response.send_message(f"Request added: {name} ({artist})", ephemeral=True)
+    await interaction.followup.send(f"Request added: {name} ({artist})", ephemeral=True)
 
 # Ping roles every 24h
 @tasks.loop(hours=24)
@@ -173,6 +176,7 @@ async def calculate_votes():
 
     print(f"Processed {len(processed)} requests out of {len(old_requests)} eligible")
 
+# Bot events
 @bot.event
 async def on_ready():
     print(f"Bot logged in as {bot.user}")
@@ -192,3 +196,5 @@ async def on_error(event, *args, **kwargs):
 
 if __name__ == "__main__":
     bot.run(TOKEN)
+
+
